@@ -26,7 +26,8 @@ async def films_keyboard(message: Union[CallbackQuery, Message], state: FSMConte
         markup.add(
             InlineKeyboardButton(text=button_text, callback_data=callback_data)
         )
-    pagination(markup, current_page, films.last_page)
+    if films.last_page > 1:
+        pagination(markup, current_page, films.last_page)
     return markup
 
 
