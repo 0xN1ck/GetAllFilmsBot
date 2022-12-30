@@ -1,3 +1,5 @@
+import re
+
 from aiogram.dispatcher.filters import Command
 from aiogram import Dispatcher
 from telebot.types import Message
@@ -7,10 +9,12 @@ from aiogram.dispatcher import filters, FSMContext
 from aiogram.types import CallbackQuery, Message
 from typing import Union
 
-from tgbot.keyboards.menu_keyboards import films_keyboard, translates_keyboard, menu_cd
+from tgbot.keyboards.menu_keyboards import films_keyboard, translates_keyboard, qualities_keyboard, menu_cd
 from tgbot.misc.states import UserState
 
-from tgbot.misc.films_module import get_info_film
+from tgbot.misc.films_module import get_info_film, get_movies
+
+import asyncio
 
 # async def user_start(message: Message):
 #     await message.reply("Hello, user!")
@@ -44,28 +48,57 @@ async def show_results(message: Message, state: FSMContext):
             print('later')
 
 
-async def list_films(message: Union[CallbackQuery, Message], state: FSMContext, **kwargs):
+async def list_films(message: Union[CallbackQuery, Message], state: FSMContext, current_page="1", **kwargs):
     if isinstance(message, Message):
         markup = await films_keyboard(message, state)
         await message.answer(f"Вот, что у нас есть по Вашему запросу \n"
                              f"🔎<b> {message.text}</b>", reply_markup=markup)
     elif isinstance(message, CallbackQuery):
         call = message
-        markup = await films_keyboard(call, state, current_page=int(call.data.split(":")[3]))
+        markup = await films_keyboard(call, state, current_page=int(current_page))
         await call.message.edit_reply_markup(markup)
 
 
-async def list_translates(callback: CallbackQuery, kp_id, **kwargs):
-    markup = await translates_keyboard(callback, kp_id)
+async def list_translates(callback: CallbackQuery, kp_id, current_page="1", **kwargs):
+    markup = await translates_keyboard(callback, kp_id, current_page)
     # await callback.message.delete()
     info = await get_info_film(token_kp=callback.bot.data['config'].token_kp, kp_id=kp_id)
+    genres = ', '.join([genre.genre for genre in info['genres']])
     await callback.message.answer_photo(photo=info['photo'],
-                                        caption=f"<i>Название: </i ><b>{info['name']}</b>\n\n"
+                                        caption=f"<i>Название: </i ><b>{info['name']} ({info['year']})\n</b>"
+                                                f"<i>Жанры: </i> <b>{genres}\n</b>"
+                                                f"<i>Продолжительность:</i> <b>{info['duration']} мин.</b>\n\n"
                                                 f"{info['description']}\n\n"
                                                 f"<i>Рейтинг Кинопоиск:</i> <b>{info['rating_kp']}</b>\n"
                                                 f"<i>Рейтинг IMDb:</i> <b>{info['rating_imdb']}</b>",
                                         reply_markup=markup)
     # Изменяем сообщение, и отправляем новые кнопки с подкатегориями
+
+
+async def list_qualities(callback: CallbackQuery, kp_id, current_page, translate_id, **kwargs):
+    # print(max_quality)
+    markup = await qualities_keyboard(callback, kp_id, current_page, translate_id)
+    await callback.message.edit_reply_markup(markup)
+
+
+async def get_film(callback: CallbackQuery, kp_id, current_page, translate_id, quality, **kwargs):
+    data = await get_movies(callback, kp_id)
+    for movies in data:
+        if movies.translation_id == int(translate_id):
+            for resolution in movies.qualities:
+                if resolution.resolution == int(quality):
+                    with open("tgbot\\test.mp4", "rb") as video:
+                        thumb = await callback.bot.get_file(callback.message.photo[2].file_id)
+                        name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
+                        duration = int(re.findall('\\d+', callback.message.caption.split("\n")[2])[0]) * 60
+                        await callback.message.answer_video(video=video,
+                                                            duration=duration,
+                                                            caption=f"{name}",
+                                                            thumb=open(thumb.file_path, 'rb'),
+                                                            )
+                        await asyncio.sleep(10)
+                    break
+            break
 
 
 async def navigate(call: CallbackQuery, callback_data: dict, state: FSMContext):
@@ -86,9 +119,13 @@ async def navigate(call: CallbackQuery, callback_data: dict, state: FSMContext):
 
     current_page = callback_data.get("current_page")
 
+    quality = callback_data.get("quality")
+
     levels = {
         "0": list_films,  # Отдаем категории
         "1": list_translates,  # Отдаем подкатегории
+        "2": list_qualities,
+        "3": get_film,
     }
 
     # Забираем нужную функцию для выбранного уровня
@@ -100,6 +137,7 @@ async def navigate(call: CallbackQuery, callback_data: dict, state: FSMContext):
         kp_id=kp_id,
         current_page=current_page,
         translate_id=translate_id,
+        quality=quality,
         state=state,
     )
 

@@ -21,10 +21,10 @@ async def get_films(message: Union[CallbackQuery, Message], state: FSMContext, c
     #     return data.data
 
 
-async def get_translates(callback: CallbackQuery, kp_id: str):
+async def get_movies(callback: CallbackQuery, kp_id: str):
     CDN = VideoCDN(callback.bot.data['config'].token_cdn)
     data = CDN.get_movies(ParamsContent(query=kp_id, field=Field.KINOPOISK_ID))
-    return data.data[0].translations
+    return data.data[0].media
 
 
 async def get_info_film(token_kp, kp_id: str):
@@ -33,6 +33,9 @@ async def get_info_film(token_kp, kp_id: str):
     response = api_client.films.send_film_request(request)
     name = response.film.name_ru
     photo = response.film.poster_url_preview
+    year = response.film.year
+    duration = response.film.film_length
+    genres = response.film.genres
     description = response.film.description
     if description is None:
         description = 'Описание отсутствует'
@@ -43,12 +46,19 @@ async def get_info_film(token_kp, kp_id: str):
     return {
         'name': name,
         'photo': photo,
+        "year": year,
+        "duration": duration,
+        "genres": genres,
         'description': description,
         'rating_kp': rating_kp,
         'rating_imdb': rating_imdb
     }
 
 
-    # await message.answer(f'Название : <b>{movie.ru_title}</b>\n'
-    #                      f'Ссылка для просмотра : {movie.iframe_src}',
-    #                      )
+# async def get_qualities(callback: CallbackQuery, kp_id: str, translation_id):
+#     CDN = VideoCDN(callback.bot.data['config'].token_cdn)
+#     data = CDN.get_movies(ParamsContent(query=kp_id, field=Field.KINOPOISK_ID, translation=int(translation_id)))
+#     for i in data.data[0].media:
+#         print(i.translation_id, translation_id)
+#         if i.translation_id is int(translation_id):
+#             print(i)

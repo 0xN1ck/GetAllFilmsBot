@@ -4,14 +4,17 @@ from aiogram.types import Message, CallbackQuery
 from typing import Union
 from aiogram.dispatcher import FSMContext
 
-from tgbot.misc.films_module import get_films, get_translates, get_info_film
+from tgbot.misc.films_module import get_films, get_movies, get_info_film
 
-menu_cd = CallbackData("show_menu", "level", "kp_id", "current_page", "translate_id")
+import json
+
+menu_cd = CallbackData("show_menu", "level", "kp_id", "current_page", "translate_id", "quality")
 buy_item = CallbackData("buy", "item_id")
 
 
-def make_callback_data(level, kp_id='0', current_page="1", translate_id="0"):
-    return menu_cd.new(level=level, kp_id=kp_id, current_page=current_page, translate_id=translate_id)
+def make_callback_data(level, kp_id='0', current_page="1", translate_id="0", quality="0"):
+    return menu_cd.new(level=level, kp_id=kp_id, current_page=current_page, translate_id=translate_id,
+                       quality=quality)
 
 
 async def films_keyboard(message: Union[CallbackQuery, Message], state: FSMContext, current_page=1):
@@ -19,7 +22,7 @@ async def films_keyboard(message: Union[CallbackQuery, Message], state: FSMConte
     markup = InlineKeyboardMarkup()
     films = await get_films(message=message, state=state, current_page=current_page)
     for num, film in enumerate(films.data):
-        button_text = f'{num+1}) {film.ru_title} ({film.year[0:4]})'
+        button_text = f'{num + 1}) {film.ru_title} ({film.year[0:4]})'
         if film.kinopoisk_id is None:
             continue
         callback_data = make_callback_data(level=CURRENT_LEVEL + 1, kp_id=film.kinopoisk_id, current_page=current_page)
@@ -53,37 +56,62 @@ def pagination(markup, current_page: int, last_page: int):
         )
 
 
-async def translates_keyboard(callback: CallbackQuery, kp_id):
+async def translates_keyboard(callback: CallbackQuery, kp_id, current_page):
     # Текущий уровень - 1
     CURRENT_LEVEL = 1
     markup = InlineKeyboardMarkup()
 
-    translates = await get_translates(callback, kp_id)
+    translates = await get_movies(callback, kp_id)
     for translate in translates:
-        button_text = f"{translate.short_title}"
+        button_text = ""
+        with open('tgbot\\translation.json', encoding='utf-8') as json_file:
+            data = json.load(json_file)
+        for i in data['data']:
+            if i['id'] == int(translate.translation_id):
+                button_text = f"{i['shorter_title']}"
+
         callback_data = make_callback_data(level=CURRENT_LEVEL + 1,
-                                           kp_id=kp_id, translate_id=translate.id)
+                                           kp_id=kp_id,
+                                           current_page=current_page,
+                                           translate_id=translate.translation_id)
         markup.insert(
             InlineKeyboardButton(text=button_text, callback_data=callback_data)
         )
     markup.row(
         InlineKeyboardButton(
             text="Назад",
-            callback_data=make_callback_data(level=CURRENT_LEVEL - 1, current_page=callback.data.split(":")[3]))
+            callback_data=make_callback_data(level=CURRENT_LEVEL - 1, current_page=current_page)
+        )
     )
     return markup
 
-# def item_keyboard(kp_id, translate_id):
-#     CURRENT_LEVEL = 2
-#     markup = InlineKeyboardMarkup()
-#
-#     markup.row(
-#         InlineKeyboardButton(
-#             text="Назад",
-#             callback_data=make_callback_data(level=CURRENT_LEVEL - 1,
-#                                              kp_id=kp_id, translate_id=translate_id))
-#     )
-#     return markup
+
+async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, translate_id):
+    CURRENT_LEVEL = 2
+    markup = InlineKeyboardMarkup()
+    qualities = await get_movies(callback, kp_id)
+
+    for quality in qualities:
+        if quality.translation_id == int(translate_id):
+            for resolution in quality.qualities:
+                callback_data = make_callback_data(level=CURRENT_LEVEL + 1,
+                                                   kp_id=kp_id,
+                                                   current_page=current_page,
+                                                   translate_id=translate_id,
+                                                   quality=str(resolution.resolution))
+                markup.insert(
+                    InlineKeyboardButton(text=str(resolution.resolution), callback_data=callback_data)
+                )
+
+    markup.row(
+        InlineKeyboardButton(
+            text="Назад",
+            callback_data=make_callback_data(level=CURRENT_LEVEL - 1,
+                                             kp_id=kp_id,
+                                             current_page=current_page,
+                                             translate_id=translate_id))
+    )
+    return markup
 
 # for subcategory in subcategories:
 #     # Чекаем в базе сколько товаров существует под данной подкатегорией

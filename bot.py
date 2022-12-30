@@ -13,6 +13,8 @@ from tgbot.handlers.echo import register_echo
 from tgbot.handlers.user import register_user
 from tgbot.middlewares.environment import EnvironmentMiddleware
 
+from aiogram.bot.api import TelegramAPIServer
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,8 +40,9 @@ async def main():
     logger.info("Starting bot")
     config = load_config(".env")
 
+    server = TelegramAPIServer.from_base("http://localhost:8081/")
     storage = RedisStorage2() if config.tg_bot.use_redis else MemoryStorage()
-    bot = Bot(token=config.tg_bot.token, parse_mode='HTML')
+    bot = Bot(token=config.tg_bot.token, parse_mode='HTML', server=server)
     dp = Dispatcher(bot, storage=storage)
 
     bot['config'] = config
