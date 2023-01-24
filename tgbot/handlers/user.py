@@ -12,9 +12,13 @@ from typing import Union
 from tgbot.keyboards.menu_keyboards import films_keyboard, translates_keyboard, qualities_keyboard, menu_cd
 from tgbot.misc.states import UserState
 
-from tgbot.misc.films_module import get_info_film, get_movies
+from tgbot.misc.films_module import get_info_film, get_movies, get_url_for_film
 
-import asyncio
+import asyncio, requests, io
+from tqdm import tqdm
+from pyffmpeg import FFprobe
+from pprint import pprint
+import os
 
 # async def user_start(message: Message):
 #     await message.reply("Hello, user!")
@@ -83,18 +87,59 @@ async def list_qualities(callback: CallbackQuery, kp_id, current_page, translate
 
 async def get_film(callback: CallbackQuery, kp_id, current_page, translate_id, quality, **kwargs):
     data = await get_movies(callback, kp_id)
+    mes = await callback.message.answer(text="Фильм скачивается на сервер")
     for movies in data:
         if movies.translation_id == int(translate_id):
             for resolution in movies.qualities:
                 if resolution.resolution == int(quality):
-                    with open("tgbot\\test.mp4", "rb") as video:
-                        thumb = await callback.bot.get_file(callback.message.photo[2].file_id)
+                    url = await get_url_for_film(url='http:' + movies.path,
+                                                 translation_id=translate_id,
+                                                 quality=quality)
+                    path = f'films\\{(url[url.find("?dn=")+4:-4]+"_"+str(translate_id)+".mp4")}'
+                    print(path, os.path.exists(path))
+                    if not os.path.exists(path):
+                        with open(path, "wb") as video:
+                            response = requests.get(url, stream=True)
+                            total_size_in_bytes = int(response.headers.get('content-length', 0))
+                            block_size = 1024
+                            name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
+                            percent_total = io.StringIO()
+                            percent_current = 10
+                            progress_bar = tqdm(file=percent_total, total=total_size_in_bytes, unit='iB', unit_scale=True,
+                                                mininterval=0.1)
+                            with open(path, 'wb') as file:
+                                for data in response.iter_content(block_size):
+                                    percent_total.truncate(0)
+                                    percent_total.seek(0)
+                                    progress_bar.update(len(data))
+                                    file.write(data)
+                                    result = percent_total.getvalue().split("\n")[-1].strip()
+                                    if int(progress_bar.last_print_n / total_size_in_bytes * 100) >= percent_current:
+                                        print(result, len(result))
+                                        await mes.edit_text(f"*Фильм скачан на:* \n"
+                                                            f"{result}",
+                                                            parse_mode='MARKDOWN')
+                                        percent_current += 10
+                            progress_bar.close()
+                            if total_size_in_bytes != 0 and progress_bar.n != total_size_in_bytes:
+                                print("ERROR, something went wrong")
+                        await mes.answer("Фильм скачан на сервер, теперь отправляем его Вам.")
+                    else:
+                        await mes.answer("Фильм есть на сервер, отправляем его Вам.")
+                    with open(path, "rb") as video:
+                        #thumb = await callback.bot.get_file(callback.message.photo[2].file_id)
                         name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
                         duration = int(re.findall('\\d+', callback.message.caption.split("\n")[2])[0]) * 60
+                        width_height = FFprobe(path).metadata[0][0]['dimensions']
+                        width = int(width_height.split('x')[0])
+                        height = int(width_height.split('x')[1])
                         await callback.message.answer_video(video=video,
                                                             duration=duration,
                                                             caption=f"{name}",
-                                                            thumb=open(thumb.file_path, 'rb'),
+                                                            #thumb=open(thumb.file_path, 'rb'),
+                                                            width=width,
+                                                            height=height,
+                                                            supports_streaming=True,
                                                             )
                         await asyncio.sleep(10)
                     break

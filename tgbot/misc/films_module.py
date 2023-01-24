@@ -7,18 +7,16 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.dispatcher import Dispatcher
 from typing import Union
 from aiogram.dispatcher import FSMContext
+from bs4 import BeautifulSoup
+import requests, re
 
 
 async def get_films(message: Union[CallbackQuery, Message], state: FSMContext, current_page=1, **kwargs):
     CDN = VideoCDN(message.bot.data['config'].token_cdn)
     async with state.proxy() as data:
         query = data['search']
-    # total_films = CDN.get_movies(ParamsContent(query=query)).total
     data = CDN.get_movies(ParamsContent(query=query, page=current_page))
     return data
-    # elif isinstance(message, CallbackQuery):
-    #     data = CDN.get_movies(ParamsContent(query=query))
-    #     return data.data
 
 
 async def get_movies(callback: CallbackQuery, kp_id: str):
@@ -55,10 +53,13 @@ async def get_info_film(token_kp, kp_id: str):
     }
 
 
-# async def get_qualities(callback: CallbackQuery, kp_id: str, translation_id):
-#     CDN = VideoCDN(callback.bot.data['config'].token_cdn)
-#     data = CDN.get_movies(ParamsContent(query=kp_id, field=Field.KINOPOISK_ID, translation=int(translation_id)))
-#     for i in data.data[0].media:
-#         print(i.translation_id, translation_id)
-#         if i.translation_id is int(translation_id):
-#             print(i)
+async def get_url_for_film(url: str, translation_id: int, quality: int):
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, 'lxml')
+    input_ = soup.find('input', id="files")
+    value = input_.get('value')
+    regexp_tr_id = f'"{str(translation_id)}":"' + r'(.+?)' + r'"'
+    found = re.search(regexp_tr_id, value).group(1)
+    link = re.split(r'_\d+.mp4', found.split(f'[{str(quality)}p]')[1])[0] + f'_{str(quality)}.mp4'
+    link_utf = 'https:/' + link[3:].replace('\\/', '/').encode('utf-8').decode('unicode-escape')
+    return link_utf

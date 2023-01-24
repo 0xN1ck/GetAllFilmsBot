@@ -93,7 +93,7 @@ async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, trans
 
     for quality in qualities:
         if quality.translation_id == int(translate_id):
-            for resolution in quality.qualities:
+            for resolution in quality.qualities[:-1]:
                 callback_data = make_callback_data(level=CURRENT_LEVEL + 1,
                                                    kp_id=kp_id,
                                                    current_page=current_page,
