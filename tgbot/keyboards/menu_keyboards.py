@@ -3,10 +3,9 @@ from aiogram.utils.callback_data import CallbackData
 from aiogram.types import Message, CallbackQuery
 from typing import Union
 from aiogram.dispatcher import FSMContext
-
 from tgbot.misc.films_module import get_films, get_movies, get_info_film
-
-import json
+from tgbot.misc.films_module import get_url_for_film
+import json, requests
 
 menu_cd = CallbackData("show_menu", "level", "kp_id", "current_page", "translate_id", "quality")
 buy_item = CallbackData("buy", "item_id")
@@ -20,6 +19,7 @@ def make_callback_data(level, kp_id='0', current_page="1", translate_id="0", qua
 async def films_keyboard(message: Union[CallbackQuery, Message], state: FSMContext, current_page=1):
     CURRENT_LEVEL = 0
     markup = InlineKeyboardMarkup()
+    count_button = 0
     films = await get_films(message=message, state=state, current_page=current_page)
     for num, film in enumerate(films.data):
         button_text = f'{num + 1}) {film.ru_title} ({film.year[0:4]})'
@@ -29,6 +29,11 @@ async def films_keyboard(message: Union[CallbackQuery, Message], state: FSMConte
         markup.add(
             InlineKeyboardButton(text=button_text, callback_data=callback_data)
         )
+        count_button += 1
+    if count_button == 0:
+        await message.reply(f'По Вашему запросу 🔎<b> {message.text}</b> ничего не найдено.\n'
+                            f'Попробуйте  <i>заново выполнить поиск</i>, изменив запрос.')
+        return 0
     if films.last_page > 1:
         pagination(markup, current_page, films.last_page)
     return markup
@@ -62,8 +67,11 @@ async def translates_keyboard(callback: CallbackQuery, kp_id, current_page):
     markup = InlineKeyboardMarkup()
 
     translates = await get_movies(callback, kp_id)
+    last_translate = ''
     for translate in translates:
         button_text = ""
+        if last_translate == translate.translation_id:
+            continue
         with open('tgbot\\translation.json', encoding='utf-8') as json_file:
             data = json.load(json_file)
         for i in data['data']:
@@ -74,9 +82,10 @@ async def translates_keyboard(callback: CallbackQuery, kp_id, current_page):
                                            kp_id=kp_id,
                                            current_page=current_page,
                                            translate_id=translate.translation_id)
-        markup.insert(
+        markup.add(
             InlineKeyboardButton(text=button_text, callback_data=callback_data)
         )
+        last_translate = translate.translation_id
     markup.row(
         InlineKeyboardButton(
             text="Назад",
@@ -90,19 +99,32 @@ async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, trans
     CURRENT_LEVEL = 2
     markup = InlineKeyboardMarkup()
     qualities = await get_movies(callback, kp_id)
-
+    count_button = 0
+    last_translate = ''
     for quality in qualities:
         if quality.translation_id == int(translate_id):
+            if last_translate == quality.translation_id:
+                continue
             for resolution in quality.qualities[:-1]:
-                callback_data = make_callback_data(level=CURRENT_LEVEL + 1,
-                                                   kp_id=kp_id,
-                                                   current_page=current_page,
-                                                   translate_id=translate_id,
-                                                   quality=str(resolution.resolution))
-                markup.insert(
-                    InlineKeyboardButton(text=str(resolution.resolution), callback_data=callback_data)
-                )
-
+                url = await get_url_for_film(url="http:" + resolution.url,
+                                             translation_id=int(translate_id),
+                                             quality=int(resolution.resolution))
+                response = requests.get(url, stream=True)
+                total_size = round(int(response.headers.get('content-length', 0)) / 1073741824, 2)
+                if total_size > 2 or total_size == 0.0:
+                    continue
+                else:
+                    callback_data = make_callback_data(level=CURRENT_LEVEL + 1,
+                                                       kp_id=kp_id,
+                                                       current_page=current_page,
+                                                       translate_id=translate_id,
+                                                       quality=str(resolution.resolution))
+                    markup.add(
+                        InlineKeyboardButton(text=str(resolution.resolution)+f" ({str(total_size)} GB)",
+                                             callback_data=callback_data)
+                    )
+                    count_button += 1
+            last_translate = quality.translation_id
     markup.row(
         InlineKeyboardButton(
             text="Назад",
@@ -111,6 +133,11 @@ async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, trans
                                              current_page=current_page,
                                              translate_id=translate_id))
     )
+    if count_button == 0:
+        await callback.message.reply("Данный фильм на VideoCDN <b><i>отсутствует</i></b>.\n"
+                                     "Попробуйте посмотреть с другим переводом.",
+                                     reply_markup=markup)
+        return 0
     return markup
 
 # for subcategory in subcategories:

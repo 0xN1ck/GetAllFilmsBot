@@ -12,7 +12,7 @@ from typing import Union
 from tgbot.keyboards.menu_keyboards import films_keyboard, translates_keyboard, qualities_keyboard, menu_cd
 from tgbot.misc.states import UserState
 
-from tgbot.misc.films_module import get_info_film, get_movies, get_url_for_film
+from tgbot.misc.films_module import get_info_film, get_movies, get_url_for_film, download_film, send_film
 
 import asyncio, requests, io
 from tqdm import tqdm
@@ -55,12 +55,14 @@ async def show_results(message: Message, state: FSMContext):
 async def list_films(message: Union[CallbackQuery, Message], state: FSMContext, current_page="1", **kwargs):
     if isinstance(message, Message):
         markup = await films_keyboard(message, state)
-        await message.answer(f"Вот, что у нас есть по Вашему запросу \n"
-                             f"🔎<b> {message.text}</b>", reply_markup=markup)
+        if markup:
+            await message.answer(f"Вот, что у нас есть по Вашему запросу \n"
+                                 f"🔎<b> {message.text}</b>", reply_markup=markup)
     elif isinstance(message, CallbackQuery):
         call = message
         markup = await films_keyboard(call, state, current_page=int(current_page))
-        await call.message.edit_reply_markup(markup)
+        if markup:
+            await call.message.edit_reply_markup(markup)
 
 
 async def list_translates(callback: CallbackQuery, kp_id, current_page="1", **kwargs):
@@ -82,12 +84,13 @@ async def list_translates(callback: CallbackQuery, kp_id, current_page="1", **kw
 async def list_qualities(callback: CallbackQuery, kp_id, current_page, translate_id, **kwargs):
     # print(max_quality)
     markup = await qualities_keyboard(callback, kp_id, current_page, translate_id)
-    await callback.message.edit_reply_markup(markup)
+    if markup:
+        await callback.message.edit_reply_markup(markup)
 
 
 async def get_film(callback: CallbackQuery, kp_id, current_page, translate_id, quality, **kwargs):
     data = await get_movies(callback, kp_id)
-    mes = await callback.message.answer(text="Фильм скачивается на сервер")
+
     for movies in data:
         if movies.translation_id == int(translate_id):
             for resolution in movies.qualities:
@@ -95,53 +98,16 @@ async def get_film(callback: CallbackQuery, kp_id, current_page, translate_id, q
                     url = await get_url_for_film(url='http:' + movies.path,
                                                  translation_id=translate_id,
                                                  quality=quality)
-                    path = f'films\\{(url[url.find("?dn=")+4:-4]+"_"+str(translate_id)+".mp4")}'
-                    print(path, os.path.exists(path))
+                    name = callback.message.caption.split("\n")[0].split("Название: ")[-1].strip()
+                    name = re.sub(r'["<>«»*:?|]', '', name)
+                    path = f'films\\{name+"_"+str(quality)+"_"+str(translate_id)+".mp4"}'
+                    mes = await callback.message.answer(text="Фильм скачивается на сервер")
                     if not os.path.exists(path):
-                        with open(path, "wb") as video:
-                            response = requests.get(url, stream=True)
-                            total_size_in_bytes = int(response.headers.get('content-length', 0))
-                            block_size = 1024
-                            name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
-                            percent_total = io.StringIO()
-                            percent_current = 10
-                            progress_bar = tqdm(file=percent_total, total=total_size_in_bytes, unit='iB', unit_scale=True,
-                                                mininterval=0.1)
-                            with open(path, 'wb') as file:
-                                for data in response.iter_content(block_size):
-                                    percent_total.truncate(0)
-                                    percent_total.seek(0)
-                                    progress_bar.update(len(data))
-                                    file.write(data)
-                                    result = percent_total.getvalue().split("\n")[-1].strip()
-                                    if int(progress_bar.last_print_n / total_size_in_bytes * 100) >= percent_current:
-                                        print(result, len(result))
-                                        await mes.edit_text(f"*Фильм скачан на:* \n"
-                                                            f"{result}",
-                                                            parse_mode='MARKDOWN')
-                                        percent_current += 10
-                            progress_bar.close()
-                            if total_size_in_bytes != 0 and progress_bar.n != total_size_in_bytes:
-                                print("ERROR, something went wrong")
+                        await download_film(callback=callback, url=url, path=path, mes=mes)
                         await mes.answer("Фильм скачан на сервер, теперь отправляем его Вам.")
                     else:
                         await mes.answer("Фильм есть на сервер, отправляем его Вам.")
-                    with open(path, "rb") as video:
-                        #thumb = await callback.bot.get_file(callback.message.photo[2].file_id)
-                        name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
-                        duration = int(re.findall('\\d+', callback.message.caption.split("\n")[2])[0]) * 60
-                        width_height = FFprobe(path).metadata[0][0]['dimensions']
-                        width = int(width_height.split('x')[0])
-                        height = int(width_height.split('x')[1])
-                        await callback.message.answer_video(video=video,
-                                                            duration=duration,
-                                                            caption=f"{name}",
-                                                            #thumb=open(thumb.file_path, 'rb'),
-                                                            width=width,
-                                                            height=height,
-                                                            supports_streaming=True,
-                                                            )
-                        await asyncio.sleep(10)
+                    await send_film(callback=callback, path=path)
                     break
             break
 
