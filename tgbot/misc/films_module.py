@@ -1,6 +1,9 @@
 import asyncio
 import io
+import json
 import re
+
+import aiogram
 import requests
 from typing import Union
 
@@ -69,7 +72,8 @@ async def get_url_for_film(url: str, translation_id: int, quality: int):
     return link_utf
 
 
-async def download_film(callback: CallbackQuery, url: str, path: str, mes):
+def download_film(callback: CallbackQuery, url: str, path: str, mes: Message, loop: asyncio.ProactorEventLoop,
+                  bot: aiogram.bot.bot.Bot):
     # with open(path, "wb") as video:
     response = requests.get(url, stream=True)
     total_size_in_bytes = int(response.headers.get('content-length', 0))
@@ -84,21 +88,34 @@ async def download_film(callback: CallbackQuery, url: str, path: str, mes):
             percent_total.seek(0)
             progress_bar.update(len(data))
             file.write(data)
-            result = percent_total.getvalue().split("\n")[-1].strip()
             if int(round(progress_bar.last_print_n / total_size_in_bytes * 100)) >= percent_current:
                 correctable_slice = percent_total.getvalue().split('|')[1]
                 result = percent_total.getvalue().replace(correctable_slice,
                                                           re.sub(r'\d', '#', correctable_slice)).strip()
-                await mes.edit_text(f"*Фильм скачан на:* \n"
-                                    f"{result}",
-                                    parse_mode='MARKDOWN')
+                name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
+                quality = callback.data.split(':')[-1]
+                translate_id = callback.data.split(':')[-2]
+                translate: str
+                with open('tgbot\\translation.json', encoding='utf-8') as json_file:
+                    data = json.load(json_file)
+                for i in data['data']:
+                    if i['id'] == int(translate_id):
+                        translate = f"{i['shorter_title']}"
+                loop.run_until_complete(
+                    bot.edit_message_text(chat_id=mes.chat.id, message_id=mes.message_id,
+                                          text=f"🎬 <b>Фильм:</b> <i>{name}</i>\n"
+                                               f"<b>Перевод:</b> <i>{translate}</i>\n"
+                                               f"<b>Качество:</b> <i>{quality}p</i>\n"
+                                               f"Скачан на сервер в объеме:\n"
+                                               f"{result.replace('<', ' ').split('[A')[0]}"))
                 percent_current += 10
     progress_bar.close()
     if total_size_in_bytes != 0 and progress_bar.n != total_size_in_bytes:
         print("ERROR, something went wrong")
 
 
-async def send_film(callback: CallbackQuery, path: str):
+def send_film(callback: CallbackQuery, path: str, loop: asyncio.ProactorEventLoop, bot: aiogram.bot.bot.Bot,
+              chat_id: int):
     with open(path, "rb") as video:
         # thumb = await callback.bot.get_file(callback.message.photo[2].file_id)
         name = callback.message.caption.split("\n")[0].split(":")[-1].strip()
@@ -106,12 +123,13 @@ async def send_film(callback: CallbackQuery, path: str):
         props = get_video_properties(path)
         width = int(props['width'])
         height = int(props['height'])
-        await callback.message.answer_video(video=video,
-                                            duration=duration,
-                                            caption=f"{name}",
-                                            # thumb=open(thumb.file_path, 'rb'),
-                                            width=width,
-                                            height=height,
-                                            supports_streaming=True,
-                                            )
-        #await asyncio.sleep(10)
+        loop.run_until_complete(
+            bot.send_video(chat_id=chat_id,
+                           video=video,
+                           duration=duration,
+                           caption=f"{name}",
+                           # thumb=open(thumb.file_path, 'rb'),
+                           width=width,
+                           height=height,
+                           supports_streaming=True,
+                           ))

@@ -1,6 +1,6 @@
+import asyncio
 import re
 
-from aiogram.dispatcher.filters import Command
 from aiogram import Dispatcher
 from telebot.types import Message
 
@@ -14,11 +14,9 @@ from tgbot.misc.states import UserState
 
 from tgbot.misc.films_module import get_info_film, get_movies, get_url_for_film, download_film, send_film
 
-import asyncio, requests, io
-from tqdm import tqdm
-from pyffmpeg import FFprobe
-from pprint import pprint
 import os
+import threading
+import platform
 
 # async def user_start(message: Message):
 #     await message.reply("Hello, user!")
@@ -100,14 +98,16 @@ async def get_film(callback: CallbackQuery, kp_id, current_page, translate_id, q
                                                  quality=quality)
                     name = callback.message.caption.split("\n")[0].split("Название: ")[-1].strip()
                     name = re.sub(r'["<>«»*:?|]', '', name)
-                    path = f'films\\{name+"_"+str(quality)+"_"+str(translate_id)+".mp4"}'
-                    mes = await callback.message.answer(text="Фильм скачивается на сервер")
+                    path = f'films\\{name + "_" + str(quality) + "_" + str(translate_id) + ".mp4"}'
+                    loop = asyncio.get_event_loop()
+                    asyncio.set_event_loop(loop)
                     if not os.path.exists(path):
-                        await download_film(callback=callback, url=url, path=path, mes=mes)
+                        mes = await callback.message.answer(text="Фильм скачивается на сервер")
+                        await asyncio.to_thread(download_film, callback, url, path, mes, loop, callback.bot)
                         await mes.answer("Фильм скачан на сервер, теперь отправляем его Вам.")
                     else:
-                        await mes.answer("Фильм есть на сервер, отправляем его Вам.")
-                    await send_film(callback=callback, path=path)
+                        mes = await callback.message.answer("Фильм есть на сервер, отправляем его Вам.")
+                    await asyncio.to_thread(send_film, callback, path, loop, callback.bot, mes.chat.id)
                     break
             break
 

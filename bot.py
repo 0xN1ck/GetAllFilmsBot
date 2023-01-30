@@ -1,3 +1,4 @@
+import nest_asyncio
 import asyncio
 import logging
 
@@ -14,6 +15,7 @@ from tgbot.handlers.user import register_user
 from tgbot.middlewares.environment import EnvironmentMiddleware
 
 from aiogram.bot.api import TelegramAPIServer
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +63,7 @@ async def main():
 
 
 if __name__ == '__main__':
+    nest_asyncio.apply()
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
