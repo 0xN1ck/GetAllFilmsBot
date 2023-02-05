@@ -12,7 +12,7 @@ import os
 async def show_results(message: Message, state: FSMContext):
     await state.update_data(search=message.text)
     await message.answer("Module in development")
-    #await list_films(message, state)
+    #await list_films(message, state) test
 
 
 async def list_tv_serials(message: Union[CallbackQuery, Message], state: FSMContext, current_page="1", **kwargs):
