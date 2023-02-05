@@ -3,9 +3,10 @@ from aiogram.utils.callback_data import CallbackData
 from aiogram.types import Message, CallbackQuery
 from typing import Union
 from aiogram.dispatcher import FSMContext
-from tgbot.misc.films_module import get_films, get_movies, get_info_film
+from tgbot.misc.films_module import get_films, get_movies
 from tgbot.misc.films_module import get_url_for_film
-import json, requests
+import json
+import requests
 
 menu_cd = CallbackData("show_menu", "level", "kp_id", "current_page", "translate_id", "quality")
 buy_item = CallbackData("buy", "item_id")
@@ -110,7 +111,7 @@ async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, trans
                                              translation_id=int(translate_id),
                                              quality=int(resolution.resolution))
                 response = requests.get(url, stream=True)
-                total_size = round(int(response.headers.get('content-length', 0)) / 1073741824, 2)
+                total_size = round(int(response.headers.get('content-length')) / 1073741824, 2)
                 if total_size > 2 or total_size == 0.0:
                     continue
                 else:
@@ -120,7 +121,7 @@ async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, trans
                                                        translate_id=translate_id,
                                                        quality=str(resolution.resolution))
                     markup.add(
-                        InlineKeyboardButton(text=str(resolution.resolution)+f" ({str(total_size)} GB)",
+                        InlineKeyboardButton(text=str(resolution.resolution) + f" ({str(total_size)} GB)",
                                              callback_data=callback_data)
                     )
                     count_button += 1
@@ -139,25 +140,3 @@ async def qualities_keyboard(callback: CallbackQuery, kp_id, current_page, trans
                                      reply_markup=markup)
         return 0
     return markup
-
-# for subcategory in subcategories:
-#     # Чекаем в базе сколько товаров существует под данной подкатегорией
-#     number_of_items = await count_items(category_code=category, subcategory_code=subcategory.subcategory_code)
-#
-#     # Сформируем текст, который будет на кнопке
-#     button_text = f"{subcategory.subcategory_name} ({number_of_items} шт)"
-#
-#     # Сформируем колбек дату, которая будет на кнопке
-#     callback_data = make_callback_data(level=CURRENT_LEVEL + 1,
-#                                        category=category, subcategory=subcategory.subcategory_code)
-#     markup.insert(
-#         InlineKeyboardButton(text=button_text, callback_data=callback_data)
-#     )
-#
-# # Создаем Кнопку "Назад", в которой прописываем колбек дату такую, которая возвращает
-# # пользователя на уровень назад - на уровень 0.
-# markup.row(
-#     InlineKeyboardButton(
-#         text="Назад",
-#         callback_data=make_callback_data(level=CURRENT_LEVEL - 1))
-# )
