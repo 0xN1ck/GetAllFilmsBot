@@ -22,7 +22,7 @@ async def get_films(message: Union[CallbackQuery, Message], state: FSMContext, c
     CDN = VideoCDN(message.bot.data['config'].token_cdn)
     async with state.proxy() as data:
         query = data['search']
-    data = CDN.get_movies(ParamsContent(query=query, page=current_page))
+        data = CDN.get_movies(ParamsContent(query=query, page=current_page))
     return data
 
 
@@ -41,7 +41,7 @@ async def get_info_film(token_kp, kp_id: str):
     year = response.film.year
     duration = response.film.film_length
     genres = response.film.genres
-    description = response.film.description
+    description = response.film.short_description
     if description is None:
         description = 'Описание отсутствует'
     elif len(description) > 930:
@@ -74,7 +74,6 @@ async def get_url_for_film(url: str, translation_id: int, quality: int):
 
 def download_film(callback: CallbackQuery, url: str, path: str, mes: Message, loop: asyncio.ProactorEventLoop,
                   bot: aiogram.bot.bot.Bot):
-    # with open(path, "wb") as video:
     response = requests.get(url, stream=True)
     total_size_in_bytes = int(response.headers.get('content-length', 0))
     block_size = 1024
@@ -104,8 +103,8 @@ def download_film(callback: CallbackQuery, url: str, path: str, mes: Message, lo
                 loop.run_until_complete(
                     bot.edit_message_text(chat_id=mes.chat.id, message_id=mes.message_id,
                                           text=f"🎬 <b>Фильм:</b> <i>{name}</i>\n"
-                                               f"<b>Перевод:</b> <i>{translate}</i>\n"
-                                               f"<b>Качество:</b> <i>{quality}p</i>\n"
+                                               f"📚 <b>Озвучка:</b> <i>{translate}</i>\n"
+                                               f"⚙ <b>Качество:</b> <i>{quality}p</i>\n"
                                                f"Скачан на сервер в объеме:\n"
                                                f"{result.replace('<', ' ').split('[A')[0]}"))
                 percent_current += 10
